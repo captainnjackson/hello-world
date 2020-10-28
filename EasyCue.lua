@@ -38,7 +38,7 @@ CUE LISTS
 CUE LIST NAVIGATION
 CUE LIST EDITOR
 REHEARSAL POINTS
-CONTINGENCIES
+CONDITIONS
 DATABASE
 TOOLS
 INITIALIZATION
@@ -1116,7 +1116,7 @@ playAudioFiles = function (filesTable, seekTime, loop, logEvent) --Uses first av
     --play files in player
     local params = {
       Name = components["Loop Player"].name,
-      StartTime = loopPlayer["utc"].Value + prefValues["Player Load Time"],
+      StartTime = -1,--loopPlayer["utc"].Value + prefValues["Player Load Time"],
       Files = startCommandFilesTable,
       Seek = seekTime or 0, --don't seek unless explicitly told to
       Loop = loop or false, --don't loop unless explicitly told to
@@ -1313,7 +1313,7 @@ funcs["Set Condition"] = {
     },
   },
   func = function (condition, value)
-    local index = getCondition(condition)
+    local index = getConditionIndex(condition)
     conditions[index].currentValue = value 
     Controls.Conditions_CurrentValue[index].String = value
   end
@@ -1345,7 +1345,7 @@ funcs["Check Condition"] = {
     },
   },
   func = function (condition, value, cueName)
-    if conditions[getCondition(condition)].currentValue == value then
+    if conditions[getConditionIndex(condition)].currentValue == value then
       executeCue(cueName)
     end
   end
@@ -4977,7 +4977,9 @@ for i = 1, #Controls.ControlWatcher_Component do
     local compName = controlWatcherTriggers[i].component
     local comp = Component.New(compName)
     local cont = controlWatcherTriggers[i].control
-    comp[cont].EventHandler = function () end
+    if comp then
+      --comp[cont].EventHandler = function () end
+    end
     
     --save to database
     controlWatcherTriggers[i].component = cc.String
@@ -5001,7 +5003,7 @@ for i = 1, #Controls.ControlWatcher_Control do
     local compName = controlWatcherTriggers[i].component
     local comp = Component.New(compName)
     local cont = controlWatcherTriggers[i].control
-    comp[cont].EventHandler = function () end
+    --comp[cont].EventHandler = function () end
     
     --save to database
     controlWatcherTriggers[i].control = cc.String
@@ -6759,6 +6761,7 @@ displayConditions = function()
   log("displayConditions function called. " .. #conditions .. " conditions found", 4)
   for i = 1, #Controls.Conditions_Name do
     if i <= #conditions then
+      -- if there's a condition, add its info to the controls
       Controls.Conditions_Name[i].String = conditions[i].name
       Controls.Conditions_InitValue[i].String = conditions[i].initValue
       Controls.Conditions_MinValue[i].String = conditions[i].minValue
@@ -6766,6 +6769,7 @@ displayConditions = function()
       Controls.Conditions_CurrentValue[i].String = conditions[i].currentValue
       Controls.Conditions_Note[i].String = conditions[i].note
     else
+      -- otherwise, remove info from controls
       Controls.Conditions_Name[i].Color = ""
       Controls.Conditions_Name[i].String = ""
       Controls.Conditions_InitValue[i].String = ""
@@ -6774,29 +6778,28 @@ displayConditions = function()
       Controls.Conditions_CurrentValue[i].String = ""
       Controls.Conditions_Note[i].String = ""
     end
+    -- change visibility
     Controls.Conditions_Name[i].IsInvisible = i > #conditions + 1
     Controls.Conditions_InitValue[i].IsInvisible = i > #conditions + 1
     Controls.Conditions_MinValue[i].IsInvisible = i > #conditions + 1
     Controls.Conditions_MaxValue[i].IsInvisible = i > #conditions + 1
     Controls.Conditions_CurrentValue[i].IsInvisible = i > #conditions + 1
     Controls.Conditions_Note[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_OrderPlace[i].IsInvisible = i > #conditions + 1
     Controls.Conditions_OrderUp[i].IsInvisible = i > #conditions + 1
     Controls.Conditions_OrderDown[i].IsInvisible = i > #conditions + 1
+    Controls.Conditions_OrderPlace[i].IsInvisible = i > #conditions + 1
     Controls.Conditions_OrderPlace[i].String = i
   end
 end
 
-getCondition = function(str)
-  log("getCondition function called. Looking for "..str..".", 4)
+getConditionIndex = function(str)
+  log("getConditionIndex function called. Looking for "..str..".", 4)
   for k,v in pairs(conditions) do
     if v.name == str then
       return k
     end
   end
 end
-
-
 
 checkConditionValues = function(index)
   if Controls.Conditions_InitValue[index].String == "" then
@@ -6843,6 +6846,10 @@ deleteCondition = function(index)
   writeCurrentDB()
 end
 
+----------------------
+--  EVENT HANDLERS  --
+----------------------
+
 for i = 1,#Controls.Conditions_Name do --Defines event handlers for all contingency buttons
   Controls.Conditions_Name[i].EventHandler = function(cc) --Activates contingency
     log("Condition Name EventHandler triggered", 4)
@@ -6882,11 +6889,38 @@ Controls.Conditions_New.EventHandler = function()
   displayConditions()
 end
 
-conditions[1] = {name = "DriveState", initValue = 0, minValue = 0, maxValue = 3, currentValue = initValue, note = ""} --1
+Controls.Conditions_Alpha.EventHandler = function()
+  table.sort(conditions, sortByname)
+  displayConditions()
+end
 
---
---TODO add contingencies to database
+moveCondition = function(prev, new)
+  log("Moving "..conditions[prev].name.." from " .. prev .. " to " .. new, 4)
+  -- get entry to move
+  --local entry = table.remove(conditions, prev)
+  -- put it in place
+  table.insert(conditions, new, table.remove(conditions, prev))
+end
 
+for i = 1, #Controls.Conditions_OrderPlace do
+
+  Controls.Conditions_OrderPlace[i].EventHandler = function(cc)
+    moveCondition(i, tonumber(cc.String))
+    displayConditions()
+    cc.String = i
+  end
+  
+  Controls.Conditions_OrderUp[i].EventHandler = function(cc)
+    moveCondition(i+1, i)
+    displayConditions()
+  end
+  
+  Controls.Conditions_OrderDown[i].EventHandler = function(cc)
+    moveCondition(i, i+1)
+    displayConditions()
+  end
+
+end
 --------------------------
 --       DATABASE       --
 --------------------------
@@ -7554,6 +7588,10 @@ Controls.Debug_TestTrigger.EventHandler = function ()
   
   --go nuts, supercoder
   
+end
+
+for i = 1, #Controls.CueEditor_ValueDropDown do
+  Controls.CueEditor_ValueDropDown[i].IsInvisible = true
 end
 
 --This gets all the possible control names for a component
