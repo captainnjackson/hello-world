@@ -724,7 +724,7 @@ getDirectoryFileNames = function(searchPath, fileNames)
       end
     end
     
-    table.sort(fileNames) --TODO don't do this every recursion
+    table.sort(fileNames) -- TODO don't do this every recursion
     
     return fileNames
   end
@@ -774,7 +774,7 @@ function expand (s)
 end
 
 wait = function (waitTime, funcName, ...)
-  log("wait function called. " .. expand(tostring(funcName)) .. " will wait " .. waitTime .. " seconds before running.") --TODO print better function name
+  log("wait function called. " .. expand(tostring(funcName)) .. " will wait " .. waitTime .. " seconds before running.") -- TODO print better function name
   
   --Allow for math functions in rehearsal timing
   local initialWait = waitTime
@@ -1116,7 +1116,7 @@ playAudioFiles = function (filesTable, seekTime, loop, logEvent) --Uses first av
     --play files in player
     local params = {
       Name = components["Loop Player"].name,
-      StartTime = -1,--loopPlayer["utc"].Value + prefValues["Player Load Time"],
+      StartTime = loopPlayer["utc"].Value + prefValues["Player Load Time"], -- TODO if player load time is -1 play now
       Files = startCommandFilesTable,
       Seek = seekTime or 0, --don't seek unless explicitly told to
       Loop = loop or false, --don't loop unless explicitly told to
@@ -1124,7 +1124,7 @@ playAudioFiles = function (filesTable, seekTime, loop, logEvent) --Uses first av
     }
     params.Seek = params.Seek + rehearsalTime
 
-    --TODO figre out how to get a file's length so we can enable this error checking
+    -- TODO figre out how to get a file's length so we can enable this error checking
     --if params.Seek < fileLength then     
       if System.IsEmulating then
         log("Cannot play files in loop player. The system is in emulation mode.", 3)
@@ -1303,6 +1303,7 @@ funcs["Set Condition"] = {
       isRequired = true,
       default = "",
       note = "Name of the condition you want to set.",
+      dropDownList = conditions,
     },
     {
       name = "Value",
@@ -1328,6 +1329,7 @@ funcs["Check Condition"] = {
       isRequired = true,
       default = "",
       note = "Condition that, if true will run the subsequent cue.",
+      dropDownList = conditions,
     },
     {
       name = "Value",
@@ -1342,6 +1344,7 @@ funcs["Check Condition"] = {
       isRequired = true,
       default = "",
       note = "Name of the cue you want to run.",
+      dropDownList = cueList,
     },
   },
   func = function (condition, value, cueName)
@@ -2749,9 +2752,9 @@ end
 
 clearTableMakerControls = function ()
   log('clearTableMakerControls function called')
-  
-  for i = 1, #Controls.CueEditor_Type do
-    Controls.CueEditor_Value[i].IsDisabled = false
+    
+    for i = 1, #Controls.CueEditor_Type do
+      Controls.CueEditor_Value[i].IsDisabled = false
   end
   
   Controls.TableMaker_Filter.IsInvisible = true
@@ -2801,9 +2804,11 @@ selectCueLine = function (cueLineNumber)
       for i = 1, numFunctionParameters do
         --get list of parameters from function library
         local parameterName = funcs[funcName].params[i].name
+        local hasDropDown = funcs[funcName].dropDownList ~= nil
         Controls.CueEditor_Parameter[i].String = parameterName
         Controls.CueEditor_Type[i].String = funcs[funcName].params[i].varType
         Controls.CueEditor_Required[i].String = tostring(funcs[funcName].params[i].isRequired)
+        Controls.CueEditor_ValueDropDown[i].IsInvisible = not hasDropDown
         
         --get info specific to this cue
         local parameter = cues[cueName].cueLines[cueLineNumber].funcParams[parameterName]
@@ -6755,7 +6760,7 @@ end
 --    CONTINGENCIES     --
 --------------------------
 
---TODO Add Controls for contingencies
+-- TODO Add Controls for contingencies
 conditions = {}
 displayConditions = function()
   log("displayConditions function called. " .. #conditions .. " conditions found", 4)
@@ -6779,15 +6784,15 @@ displayConditions = function()
       Controls.Conditions_Note[i].String = ""
     end
     -- change visibility
-    Controls.Conditions_Name[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_InitValue[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_MinValue[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_MaxValue[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_CurrentValue[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_Note[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_OrderUp[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_OrderDown[i].IsInvisible = i > #conditions + 1
-    Controls.Conditions_OrderPlace[i].IsInvisible = i > #conditions + 1
+    Controls.Conditions_Name[i].IsInvisible = i > #conditions
+    Controls.Conditions_InitValue[i].IsInvisible = i > #conditions
+    Controls.Conditions_MinValue[i].IsInvisible = i > #conditions
+    Controls.Conditions_MaxValue[i].IsInvisible = i > #conditions
+    Controls.Conditions_CurrentValue[i].IsInvisible = i > #conditions
+    Controls.Conditions_Note[i].IsInvisible = i > #conditions
+    Controls.Conditions_OrderUp[i].IsInvisible = i > #conditions
+    Controls.Conditions_OrderDown[i].IsInvisible = i > #conditions
+    Controls.Conditions_OrderPlace[i].IsInvisible = i > #conditions
     Controls.Conditions_OrderPlace[i].String = i
   end
 end
@@ -6815,7 +6820,7 @@ checkConditionValues = function(index)
     Controls.Conditions_CurrentValue[index].String = "0"
   end
   if Controls.Conditions_Name[index].String == "" then
-    Controls.Conditions_Name[index].Color = "red"
+    Controls.Conditions_Name[index].Color = ""
     return false
   end
   Controls.Conditions_Name[index].Color = ""
@@ -6838,9 +6843,9 @@ saveCondition = function(index)
 end
 
 deleteCondition = function(index)
+  log("deleteCondition function called with index "..index..".", 4)
   local name = conditions[index].name
   table.remove(conditions,index)
-  table.sort(conditions)
   displayConditions()
   log("Condition "..name.." removed.", 3)
   writeCurrentDB()
@@ -6885,7 +6890,30 @@ for i = 1,#Controls.Conditions_Name do --Defines event handlers for all continge
   end
 end
 
+getUniqueCondtionName = function(name, claim)
+  local name = name or "New Condition"
+  
+  for i = 1, #conditions do
+    if name == conditions[i].name then
+      if not claim then
+        claim = 0
+        name = getUniqueCondtionName(name .. "(" .. claim + 1 .. ")", claim + 1)
+      else
+        name = string.gsub( name,"%(%d*%)","(" .. claim + 1 ..")")
+        name = getUniqueCondtionName(name, claim + 1)
+      end
+      break
+    end
+  end
+
+  return name
+
+end
+
 Controls.Conditions_New.EventHandler = function()
+  local newCondition = {name = "", initValue = 0, minValue = 0, maxValue = 1, currentValue = 0, note = ""}
+  newCondition.name = getUniqueCondtionName()
+  table.insert(conditions, newCondition)
   displayConditions()
 end
 
@@ -6991,7 +7019,7 @@ readCurrentDB = function ()
   populateCueListNames()
   relistCueListsOrder()
   selectCueListByPosition(1)
-  --TODO put the name of the first cue list to Controls.UCI_ShowSelect.String
+  -- TODO put the name of the first cue list to Controls.UCI_ShowSelect.String
   
   --CUE LIST EDITOR
   --selectCueEntry(1) --already happens as subfunction of cue lists init
@@ -7031,7 +7059,7 @@ readCurrentDB = function ()
 end
 
 saveDatabase = function (dbToSave, destination)
-  log('saveDatabase function called. Saving Current DB to ' .. tostring(destination), 3) --TODO make this more useful
+  log('saveDatabase function called. Saving Current DB to ' .. tostring(destination), 3) -- TODO make this more useful
   
   if type(dbToSave) == "table" then
     dbToSave = json.encode(dbToSave)
