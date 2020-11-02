@@ -702,31 +702,37 @@ filter = function(t, pattern)
 
 end
 
-getDirectoryFileNames = function(searchPath, fileNames)
-  --log('getDirectoryFileNames function called')  --disabled because recursion caused too many logs
+files = {}
 
-  fileNames = fileNames or {}
+getDirectoryFileNames = function(...)
+  --log('getDirectoryFileNames function called', 4)  --disabled because recursion caused too many logs
 
-  --check that you're actually running on a core
-  if System.IsEmulating then
-    log('No files retrieved from core because this design is running in emulation.')
+  -- TODO localize the file and directory tables
+  local d = table.pack(select(2, ...)) or {} -- this are the remaining arguments
+  local path = select("1", ...) or "" -- the current path the function is looking through
 
-  else
-    local searchPath = searchPath or ""
+  -- get entries
+  if not System.IsEmulating then
+    for k,v in pairs(dir.get("media/"..path)) do
 
-    --get file names from core
-    for k,v in pairs(dir.get("media/Audio/"..searchPath)) do
-      if v.type == "file" then
-        local fileName = "Audio"..searchPath.."/"..v.name
-        table.insert(fileNames, fileName)
-      else --(v.type is probably "directory")
-        getDirectoryFileNames(searchPath.."/"..v.name, fileNames)
+      if v.type == "directory" then
+        -- set the directories aside to be sorted through again
+        table.insert(d, path..v.name.."/")
+        --table.insert(directories, path..v.name..'/') -- add it to the suggested search control
+      else
+        -- put the files in the files table
+        table.insert(files, path..v.name)
       end
+
     end
 
-    table.sort(fileNames) -- TODO don't do this every recursion
+    if #d > 0 then -- if we have remaining arguments
+      getDirectoryFileNames(table.unpack(d)) -- do it again
+    end
 
-    return fileNames
+    return files
+  else
+    return {}
   end
 end
 
@@ -4974,6 +4980,21 @@ setControlWatcherControlDropdownChoices = function (chNum)
   Controls.ControlWatcher_Control[chNum].Choices = choices
 end
 
+hasEventHandler = function(compName)
+  for k,v in pairs(controlWatcherTriggers) do
+    if v.component == compName then
+      return true
+    else
+      return false
+    end
+  end
+end
+
+setEventHandlers = function()
+  --for k,v in pairs(controlWatcherTriggers) do
+    --if v.
+end
+
 for i = 1, #Controls.ControlWatcher_Component do
   Controls.ControlWatcher_Component[i].EventHandler = function (cc)
     log('ControlWatcher_Component #' .. i .. ' changed to ' .. cc.String)
@@ -4982,7 +5003,7 @@ for i = 1, #Controls.ControlWatcher_Component do
     local compName = controlWatcherTriggers[i].component
     local comp = Component.New(compName)
     local cont = controlWatcherTriggers[i].control
-    if compName:hasEventHandler() then
+    if hasEventHandler(compName) then
       print("We have a component " .. compName)
       comp[cont].EventHandler = function () end
     else
@@ -5011,7 +5032,9 @@ for i = 1, #Controls.ControlWatcher_Control do
     local compName = controlWatcherTriggers[i].component
     local comp = Component.New(compName)
     local cont = controlWatcherTriggers[i].control
-    --comp[cont].EventHandler = function () end
+    if hasEventHandler(compName) then
+      comp[cont].EventHandler = function () end
+    end
 
     --save to database
     controlWatcherTriggers[i].control = cc.String
@@ -5241,8 +5264,10 @@ deleteControlWatcherTrigger = function ()
   local compName = controlWatcherTriggers[selectedTriggerNumber].component
   local comp = Component.New(compName)
   local cont = controlWatcherTriggers[selectedTriggerNumber].control
-  comp[cont].EventHandler = function () end
 
+  if hasEventHandler(compName) then
+    comp[cont].EventHandler = function () end
+  end
   --remove from database
   table.remove(controlWatcherTriggers, selectedtriggerNumber)
 
@@ -5465,6 +5490,11 @@ populateCueListNames = function () --updates names of cues everywhere
   for i = 1, #Controls.RehearsalPoints_CueList do
     Controls.RehearsalPoints_CueList[i].Choices = cueListTable
   end
+end
+
+chooseDefaultCueList = function()
+  Controls.UCI_ShowSelect.String = getSelectedCueListName()
+  Controls.UCI_ShowSelect.EventHandler(Controls.UCI_ShowSelect)
 end
 
 getCueListNameFromPosition = function (position) --returns name of cue list, given position in list. checks actual cues table instead of Controls
@@ -6763,7 +6793,7 @@ end
 --    CONTINGENCIES     --
 --------------------------
 
--- TODO Add Controls for contingencies
+-- Add Controls for contingencies
 conditions = {}
 displayConditions = function()
   log("displayConditions function called. " .. #conditions .. " conditions found", 4)
@@ -7022,7 +7052,7 @@ readCurrentDB = function ()
   populateCueListNames()
   relistCueListsOrder()
   selectCueListByPosition(1)
-  -- TODO put the name of the first cue list to Controls.UCI_ShowSelect.String
+  chooseDefaultCueList()
 
   --CUE LIST EDITOR
   --selectCueEntry(1) --already happens as subfunction of cue lists init
