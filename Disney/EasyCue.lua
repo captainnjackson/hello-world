@@ -4869,10 +4869,11 @@ end
 
 
 populateControlWatcherTriggers = function ()
-  log('populateControlWatcherTriggers function called')
+  log('populateControlWatcherTriggers function called', 4)
 
   --show the info for existing data
   for i = 1, #controlWatcherTriggers do
+    print(i, controlWatcherTriggers[i].component)
     Controls.ControlWatcher_MoveDown[i].IsInvisible = false
     Controls.ControlWatcher_OrderText[i].IsInvisible = false
 
@@ -4980,19 +4981,14 @@ setControlWatcherControlDropdownChoices = function (chNum)
   Controls.ControlWatcher_Control[chNum].Choices = choices
 end
 
-hasEventHandler = function(compName)
+hasEventHandler = function(compName, cont)
   for k,v in pairs(controlWatcherTriggers) do
-    if v.component == compName then
+    if v.component == compName and v.control == cont then
       return true
     else
       return false
     end
   end
-end
-
-setEventHandlers = function()
-  --for k,v in pairs(controlWatcherTriggers) do
-    --if v.
 end
 
 for i = 1, #Controls.ControlWatcher_Component do
@@ -5001,14 +4997,17 @@ for i = 1, #Controls.ControlWatcher_Component do
 
     --remove old event handler
     local compName = controlWatcherTriggers[i].component
-    local comp = Component.New(compName)
     local cont = controlWatcherTriggers[i].control
-    if hasEventHandler(compName) then
-      print("We have a component " .. compName)
-      comp[cont].EventHandler = function () end
-    else
-      print("No Component name present.")
+
+    if not compName == "" and not cont == "" then
+      log("No control name present", 2)
+      setControlWatcherControlDropdownChoices(i)
+      local comp = Component.New(compName)
+      if hasEventHandler(compName, cont) then
+        comp[cont].EventHandler = function () end
+      end
     end
+
 
     --save to database
     controlWatcherTriggers[i].component = cc.String
@@ -5016,7 +5015,6 @@ for i = 1, #Controls.ControlWatcher_Component do
     writeCurrentDB()
 
     Controls.ControlWatcher_Control[i].String = ""
-    setControlWatcherControlDropdownChoices(i)
 
     checkIfShouldMakeControlWatcherEventHandlers(i)
 
@@ -5105,12 +5103,11 @@ getSelectedControlWatcherTriggerNumber = function ()
 
   for i = 1, #Controls.ControlWatcher_Select do
     if Controls.ControlWatcher_Select[i].Boolean then
-      triggerNumber = i
-      break
+      return i
     end
   end
 
-  return triggerNumber
+  return error()
 end
 
 selectControlWatcherTrigger = function (triggerNumber)
@@ -5220,7 +5217,7 @@ end
 Controls.ControlWatcher_SortAlpha.EventHandler = function ()
   log('ControlWatcher_SortAlpha button presed')
 
-  table.sort(controlWatcherTriggers, sortByAlpha)
+  table.sort(controlWatcherTriggers, sortByname)
 
   populateControlWatcherTriggers()
   writeCurrentDB()
@@ -5256,10 +5253,17 @@ copyControlWatcherTrigger = function ()
 end
 
 deleteControlWatcherTrigger = function ()
-  log('deleteControlWatcherTrigger function called')
+  log('deleteControlWatcherTrigger function called:'.. " Attempting to remove " .. getSelectedControlWatcherTriggerNumber())
 
   local selectedTriggerNumber = getSelectedControlWatcherTriggerNumber()
 
+  --check to see if we even have the data we need
+  if controlWatcherTriggers[selectedTriggerNumber].component == "" or controlWatcherTriggers[selectedTriggerNumber].control == "" then
+    log("Attempted to delete control watcher trigger where there was none", 1)
+    table.remove(controlWatcherTriggers, selectedTriggerNumber)
+    populateControlWatcherTriggers()
+    return
+  end
   --remove old event handler
   local compName = controlWatcherTriggers[selectedTriggerNumber].component
   local comp = Component.New(compName)
@@ -5269,7 +5273,7 @@ deleteControlWatcherTrigger = function ()
     comp[cont].EventHandler = function () end
   end
   --remove from database
-  table.remove(controlWatcherTriggers, selectedtriggerNumber)
+  table.remove(controlWatcherTriggers, selectedTriggerNumber)
 
   --update view
   populateControlWatcherTriggers()
@@ -5349,7 +5353,68 @@ Controls.ControlWatcher_Enable.EventHandler = function ()
   writeControlWatcherTriggersEnableLegend()
 end
 
-makeControlWatcherEventHandlers = function ()
+getControlValues = function(index)
+  local triggers = {controlWatcherTriggers[index]}
+
+  for i = 1, #controlWatcherTriggers do
+    if i ~= index and controlWatcherTriggers[index].component == controlWatcherTriggers[i].component then
+      log("Adding additional values for event handler on " .. controlWatcherTriggers[index].component)
+      table.insert(triggers, controlWatcherTriggers[i])
+    end
+  end
+
+  return triggers
+end
+
+checkEventHandlers = function(cc, index)
+  log('Control Watcher triggered for ' .. controlWatcherTriggers[index].component .. ' ' .. controlWatcherTriggers[index].control, 4)
+
+
+  for k,v in pairs(getControlValues(index)) do
+    local execute = false
+
+    if v.controlType == "Boolean" then
+
+      if v.sign == "=" then
+        execute = toboolean(v.value) == cc.Boolean
+      elseif v.sign == "~=" then
+        execute = v.value ~= cc.Boolean
+      end
+
+    elseif v.controlType == "String" then
+
+      if v.sign == "=" then
+        execute = v.value == cc.String
+      elseif v.sign == "~=" then
+        execute = v.value ~= cc.String
+      end
+
+    elseif v.controlType == "Value" then
+      if v.sign == "=" then
+        execute = v.value == cc.Value
+      elseif v.sign == "~=" then
+        execute = v.value ~= cc.Value
+      elseif v.sign == "<" then
+        execute = v.value < cc.Value
+      elseif v.sign == ">" then
+        execute = v.value > cc.Value
+      elseif v.sign == "<=" then
+        execute = v.value <= cc.Value
+      elseif v.sign == ">=" then
+        execute = v.value >= cc.Value
+      end
+
+    end
+
+    if execute then
+      executeCue(v.cue)
+    end
+  end
+
+
+end
+
+makeControlWatcherEventHandlers = function (index)
   log('makeControlWatcherEventHandlers function called')
 
   --clear old EHs
@@ -5385,52 +5450,15 @@ makeControlWatcherEventHandlers = function ()
     if compName ~= "" and cont ~= "" and sign ~= "" and value ~= "" and cue ~= "" then
       log('Creating Control Watcher trigger for # ' .. i)
 
+      controlWatcherTriggers[i].sign = sign
+      controlWatcherTriggers[i].controlType = controlType
+      controlWatcherTriggers[i].value = value
+      controlWatcherTriggers[i].cue = cue
+
       comp[cont].EventHandler = function (cc)
-        log('Control Watcher triggered for ' .. compName .. ' ' .. cont)
-
-        --look through table matching lines
-        for j = 1, #controlWatcherTriggers do
-
-          --first check for correct control
-          if compName == controlWatcherTriggers[j].component and cont == controlWatcherTriggers[j].control then
-
-            --get control's value/string
-            local controlValue = nil
-            if controlType == "Boolean" then
-              controlValue = cc.String
-            elseif controlType == "String" then
-              controlValue = cc.String
-            elseif controlType == "Value" then
-              controlValue = cc.Value
-            end
-
-            --next check for matching value
-            --this seems inelegant. (in fact, this whole thing does.) if you find a better method, let me know!
-            local matchFound = false
-
-            if sign == "=" and controlValue == value then
-              matchFound = true
-            elseif sign == "~=" and controlValue ~= value then
-              matchFound = true
-            elseif sign == "<" and controlValue < value then
-              matchFound = true
-            elseif sign == ">" and controlValue > value then
-              matchFound = true
-            elseif sign == "<=" and cc.String <= value then
-              matchFound = true
-            elseif sign == ">=" and controlValue >= value then
-              matchFound = true
-            end
-
-            if matchFound then
-              log('Control Watcher found a matching value. Triggering a cue: ' .. cue, 3)
-              executeCue(cue)
-            else
-              log('Control Watcher did not find a matching value. Cue not triggered.')
-            end
-          end
-        end
+        checkEventHandlers(cc, i)
       end
+
     end
   end
 end
